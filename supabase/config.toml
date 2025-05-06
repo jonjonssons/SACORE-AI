@@ -1,0 +1,5 @@
+
+project_id = "ucofzcubtdgwcekdogxr"
+
+[functions.linkedin_data_retrieval]
+verify_jwt = false

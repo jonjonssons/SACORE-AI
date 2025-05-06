@@ -1,0 +1,785 @@
+import { openaiConfig, isOpenAIConfigured } from '../config/openai';
+import { SIGNALHIRE_API_KEY, SIGNALHIRE_API_URL, LOCAL_SERVER_URL, CALLBACK_URL } from '../config/api';
+import dotenv from 'dotenv';
+
+// Initialize environment variables
+dotenv.config();
+
+/**
+ * API Configuration
+ */
+const SIGNALHIRE_API_KEY = process.env.SIGNALHIRE_API_KEY || '202.Q4S8wjq5YS5alNEORwZ6og6ICOPH';
+const SIGNALHIRE_API_URL = process.env.SIGNALHIRE_API_URL || 'https://www.signalhire.com/api';
+const LOCAL_SERVER_URL = process.env.LOCAL_SERVER_URL || 'http://localhost:3333';
+const CALLBACK_URL = process.env.CALLBACK_URL || 'http://localhost:3333/api/signalhire-callback';
+
+/**
+ * API handler for profile data extraction
+ * Creates a mock API endpoint for development purposes
+ */
+
+interface FetchProfileRequest {
+  profileData: string;
+  title?: string;
+  snippet?: string;
+  prompt?: string;
+}
+
+interface ProfileExtractionResult {
+  name: string;
+  title: string;
+  company: string;
+  error?: string;
+}
+
+/**
+ * Generate realistic mock profile data based on LinkedIn username
+ * Used as a fallback when API calls fail or for development
+ */
+function generateMockProfileData(username: string, linkedInUrl: string) {
+  // Extract name components from username (replace hyphens and dots with spaces)
+  const nameParts = username.replace(/[.-]/g, ' ').split(/\s+/);
+  
+  // Capitalize each part
+  const formattedNameParts = nameParts.map(part => 
+    part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+  );
+  
+  // Get first and last name
+  const firstName = formattedNameParts[0] || 'John';
+  const lastName = formattedNameParts.length > 1 ? formattedNameParts[formattedNameParts.length - 1] : 'Doe';
+  const fullName = formattedNameParts.join(' ') || 'John Doe';
+  
+  // Generate email variants
+  const emailDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'company.com'];
+  const randomDomain = emailDomains[Math.floor(Math.random() * emailDomains.length)];
+  const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}@${randomDomain}`;
+  
+  // Generate Swedish phone number
+  const phonePrefix = '+46';
+  const phoneNumber = phonePrefix + ' ' + Math.floor(70000000 + Math.random() * 9999999);
+  
+  // List of common Swedish companies
+  const companies = [
+    'Ericsson', 'Volvo', 'IKEA', 'H&M', 'Electrolux', 'Spotify', 'Klarna', 
+    'Scania', 'Handelsbanken', 'SEB', 'Nordea', 'SKF', 'ABB', 'Atlas Copco',
+    'Husqvarna', 'Essity', 'SSAB', 'Telia', 'ICA Gruppen', 'Vattenfall',
+    'Saab', 'Securitas', 'SAS', 'Tele2', 'TeliaSonera', 'Sandvik'
+  ];
+  
+  // List of job titles
+  const titles = [
+    'Software Developer', 'Project Manager', 'Sales Manager', 'Product Owner',
+    'UX Designer', 'Data Scientist', 'Business Analyst', 'Marketing Manager',
+    'Account Executive', 'Senior Developer', 'DevOps Engineer', 'IT Consultant',
+    'System Architect', 'CTO', 'CEO', 'CFO', 'COO', 'CIO', 'HR Manager',
+    'Customer Success Manager', 'Technical Lead', 'Backend Developer'
+  ];
+  
+  // List of locations
+  const locations = [
+    'Stockholm, Sweden', 'Gothenburg, Sweden', 'Malmö, Sweden', 'Uppsala, Sweden',
+    'Linköping, Sweden', 'Örebro, Sweden', 'Västerås, Sweden', 'Helsingborg, Sweden',
+    'Norrköping, Sweden', 'Jönköping, Sweden', 'Umeå, Sweden', 'Lund, Sweden',
+    'Oslo, Norway', 'Copenhagen, Denmark', 'Helsinki, Finland', 'London, UK'
+  ];
+  
+  // List of universities
+  const universities = [
+    'Stockholm University', 'KTH Royal Institute of Technology', 'Uppsala University',
+    'Lund University', 'Chalmers University of Technology', 'Gothenburg University',
+    'Linköping University', 'Umeå University', 'Luleå University of Technology',
+    'Stockholm School of Economics', 'Karolinska Institutet', 'Malmö University',
+    'Norwegian University of Science and Technology', 'University of Oslo',
+    'Aalto University', 'University of Copenhagen', 'Technical University of Denmark'
+  ];
+  
+  // List of degrees
+  const degrees = [
+    'Bachelor of Science in Computer Science',
+    'Master of Science in Engineering',
+    'Bachelor of Business Administration',
+    'Master of Business Administration',
+    'PhD in Computer Science',
+    'Master of Science in Information Technology',
+    'Bachelor of Science in Electrical Engineering',
+    'Master of Science in Marketing',
+    'Bachelor of Arts in Design',
+    'Master of Arts in UX Design'
+  ];
+  
+  // Generate random experience (1-3 previous positions)
+  const numExperiences = 1 + Math.floor(Math.random() * 3);
+  const experiences = [];
+  const usedCompanies = new Set();
+  
+  // Current company
+  const currentCompany = companies[Math.floor(Math.random() * companies.length)];
+  usedCompanies.add(currentCompany);
+  
+  // Current title
+  const currentTitle = titles[Math.floor(Math.random() * titles.length)];
+  
+  for (let i = 0; i < numExperiences; i++) {
+    // Find a company not already used
+    let company;
+    do {
+      company = companies[Math.floor(Math.random() * companies.length)];
+    } while (usedCompanies.has(company));
+    
+    usedCompanies.add(company);
+    
+    const title = titles[Math.floor(Math.random() * titles.length)];
+    const years = 1 + Math.floor(Math.random() * 5);
+    const duration = `${years} year${years > 1 ? 's' : ''}`;
+    
+    experiences.push({
+      company,
+      title,
+      duration
+    });
+  }
+  
+  // Add current position as first experience
+  experiences.unshift({
+    company: currentCompany,
+    title: currentTitle,
+    duration: `${1 + Math.floor(Math.random() * 3)} years`
+  });
+  
+  // Generate random education (1-2 entries)
+  const numEducation = 1 + Math.floor(Math.random() * 2);
+  const education = [];
+  
+  for (let i = 0; i < numEducation; i++) {
+    const school = universities[Math.floor(Math.random() * universities.length)];
+    const degree = degrees[Math.floor(Math.random() * degrees.length)];
+    const graduationYear = 2010 + Math.floor(Math.random() * 13); // 2010-2022
+    
+    education.push({
+      school,
+      degree,
+      year: graduationYear.toString()
+    });
+  }
+  
+  // Get random location
+  const location = locations[Math.floor(Math.random() * locations.length)];
+  
+  // Return formatted profile data
+  return {
+    name: fullName,
+    title: currentTitle,
+    company: currentCompany,
+    email: email,
+    phone: phoneNumber,
+    location: location,
+    experience: experiences,
+    education: education,
+    linkedInUrl: linkedInUrl // Include the original LinkedIn URL
+  };
+}
+
+/**
+ * Process a profile extraction request using OpenAI
+ */
+export const extractProfileWithOpenAI = async (
+  requestData: FetchProfileRequest
+): Promise<ProfileExtractionResult> => {
+  if (!isOpenAIConfigured()) {
+    console.error('OpenAI API is not configured');
+    return { 
+      name: '', 
+      title: '', 
+      company: '',
+      error: 'OpenAI API not configured'
+    };
+  }
+
+  try {
+    const { profileData, prompt } = requestData;
+    
+    console.log('Processing profile extraction with OpenAI');
+    console.log('Input data:', profileData.substring(0, 100) + '...');
+
+    // Custom system prompt for accurate company extraction
+    const systemPrompt = prompt || `
+      You are a LinkedIn profile analyzer specialized in extracting accurate company names.
+      
+      Given a LinkedIn profile snippet or title, extract the following information:
+      1. The person's name
+      2. Their current job title
+      3. The company name they work for
+      
+      IMPORTANT RULES FOR COMPANY EXTRACTION:
+      - Do NOT output generic terms like "Experience", "Location", "Technical", "Regional", etc.
+      - Do NOT output locations or cities as companies (e.g., Oslo, Stockholm, Sweden)
+      - Do NOT output academic institutions or schools as companies
+      - Do NOT output job titles as companies
+      - Do NOT output industry terms like "Cybersecurity" or "Finance" as companies
+      - Only extract ACTUAL company names like "Microsoft", "ABB", "Telenor"
+      - If you cannot identify a clear company name, return an empty string
+      
+      Respond with a JSON object containing name, title, and company fields.
+    `;
+
+    // Call OpenAI API
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openaiConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: openaiConfig.model || 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: profileData }
+        ],
+        temperature: 0.1, // Low temperature for more deterministic results
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to extract profile data');
+    }
+
+    const data = await response.json();
+    const extractedContent = data.choices[0]?.message?.content?.trim();
+    console.log('OpenAI response:', extractedContent);
+
+    if (!extractedContent) {
+      return { name: '', title: '', company: '' };
+    }
+
+    // Parse the response JSON
+    let extractedData: ProfileExtractionResult;
+    try {
+      extractedData = JSON.parse(extractedContent);
+    } catch (e) {
+      console.error('Error parsing OpenAI response as JSON:', e);
+      
+      // Fallback to regex extraction if JSON parsing fails
+      const nameMatch = extractedContent.match(/name"?\s*:\s*"([^"]+)"/i);
+      const titleMatch = extractedContent.match(/title"?\s*:\s*"([^"]+)"/i);
+      const companyMatch = extractedContent.match(/company"?\s*:\s*"([^"]+)"/i);
+      
+      extractedData = {
+        name: nameMatch?.[1] || '',
+        title: titleMatch?.[1] || '',
+        company: companyMatch?.[1] || ''
+      };
+    }
+
+    // Extra validation for company name
+    const invalidCompanyTerms = [
+      'experience', 'erfarenhet', 'erfaring', 'location', 'position', 'profile',
+      'end', 'technical', 'technology', 'regional', 'utdanning', 'formation',
+      'not available', 'unknown', 'linkedin', 'page', 'website', 'n/a', 'none',
+      'cybersecurity', 'security', 'sales', 'education'
+    ];
+
+    // Check if extracted company is invalid
+    if (
+      extractedData.company && 
+      (invalidCompanyTerms.includes(extractedData.company.toLowerCase()) ||
+       extractedData.company.length < 2)
+    ) {
+      console.log(`Invalid company detected: "${extractedData.company}". Setting to empty string.`);
+      extractedData.company = '';
+    }
+
+    return extractedData;
+  } catch (error: unknown) {
+    console.error('Error extracting profile with OpenAI:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { 
+      name: '', 
+      title: '', 
+      company: '',
+      error: `Error: ${errorMessage}`
+    };
+  }
+};
+
+/**
+ * Mock API handler for fetch-profile-data endpoint
+ */
+export const handleFetchProfileDataRequest = async (request: Request): Promise<Response> => {
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  try {
+    const requestData: FetchProfileRequest = await request.json();
+    
+    if (!requestData.profileData) {
+      return new Response(
+        JSON.stringify({ error: 'Profile data is required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const result = await extractProfileWithOpenAI(requestData);
+
+    return new Response(
+      JSON.stringify(result),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  } catch (error: unknown) {
+    console.error('Error processing fetch-profile-data request:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(
+      JSON.stringify({ error: `Failed to process request: ${errorMessage}` }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+};
+
+/**
+ * SignalHire API configuration
+ */
+// These constants are imported from '../config/api'
+
+/**
+ * Handler for SignalHire profile enrichment
+ */
+export const handleSignalHireProfileRequest = async (request: Request): Promise<Response> => {
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  try {
+    // Safer way to read request body
+    const clonedRequest = request.clone();
+    const requestText = await clonedRequest.text();
+    console.log("Received request to /api/fetchProfile");
+    console.log("Raw request body:", requestText);
+    
+    // Check if we have content
+    if (!requestText || requestText.trim() === '') {
+      console.error("Empty request body");
+      return new Response(
+        JSON.stringify({
+          error: 'Empty request body',
+          message: 'Please provide a valid JSON body with LinkedIn URL'
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Parse JSON with error handling
+    let requestData;
+    try {
+      requestData = JSON.parse(requestText);
+      console.log("Parsed request data:", requestData);
+    } catch (jsonError) {
+      console.error("Failed to parse request JSON:", jsonError);
+      return new Response(
+        JSON.stringify({
+          error: 'Invalid JSON in request body',
+          details: jsonError instanceof Error ? jsonError.message : String(jsonError),
+          receivedText: requestText.substring(0, 100) + (requestText.length > 100 ? '...' : '')
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate request data
+    if (!requestData || typeof requestData !== 'object') {
+      console.error("Request data is not an object:", requestData);
+      return new Response(
+        JSON.stringify({
+          error: 'Invalid request data format',
+          message: 'Request body must be a JSON object',
+          receivedData: typeof requestData
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Get the LinkedIn URL from the request
+    const url = requestData.url || requestData.linkedinUrl;
+    if (!url) {
+      console.error("Missing LinkedIn URL in request");
+      return new Response(
+        JSON.stringify({
+          error: 'LinkedIn URL is required',
+          message: 'Please provide a LinkedIn URL in the request body',
+          receivedFields: Object.keys(requestData)
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Validate URL format
+    if (typeof url !== 'string' || !url.includes('linkedin.com')) {
+      console.error("Invalid LinkedIn URL format:", url);
+      return new Response(
+        JSON.stringify({
+          error: 'Invalid LinkedIn URL format',
+          message: 'URL must be a valid LinkedIn profile URL',
+          receivedUrl: url
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    console.log("Processing LinkedIn URL:", url);
+
+    // Check if API key is configured
+    if (!SIGNALHIRE_API_KEY) {
+      console.error('SignalHire API key is not configured');
+      
+      // For testing purposes, return mock data if URL contains 'mockprofile'
+      if (url.toLowerCase().includes('mockprofile')) {
+        console.log('Generating mock profile data for URL:', url);
+        const mockName = url.split('/').pop() || 'mockuser';
+        const mockData = generateMockProfileData(mockName, url);
+        
+        return new Response(
+          JSON.stringify(mockData),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ 
+          error: 'API key is not configured',
+          message: 'Please configure a SignalHire API key to use this feature'
+        }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // First, check if we already have this profile data cached
+    console.log('Checking if profile data exists locally for URL:', url);
+    
+    try {
+      const encodedUrl = encodeURIComponent(url);
+      const localCheckResponse = await fetch(`${LOCAL_SERVER_URL}/api/profile/${encodedUrl}`);
+      
+      if (localCheckResponse.ok) {
+        const localData = await localCheckResponse.json();
+        
+        // If we already have the data, return it immediately
+        if (localData.found && localData.data) {
+          console.log('Found cached profile data for:', url);
+          return new Response(
+            JSON.stringify({
+              name: localData.data.profile.fullName || 'Unknown Name',
+              title: getProfileTitle(localData.data.profile),
+              company: getProfileCompany(localData.data.profile),
+              email: getProfileEmail(localData.data.profile),
+              phone: getProfilePhone(localData.data.profile),
+              location: getProfileLocation(localData.data.profile),
+              experience: formatExperience(localData.data.profile.experience),
+              education: formatEducation(localData.data.profile.education),
+              linkedInUrl: url,
+              source: 'cached'
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // If we have a pending request, let the user know
+        if (localData.pending) {
+          console.log('Profile data is pending for:', url);
+          return new Response(
+            JSON.stringify({
+              name: "Processing Request",
+              title: "Processing",
+              company: "Waiting for SignalHire to process your request",
+              message: "Your request is being processed. Please check back in a few moments.",
+              pending: true,
+              linkedInUrl: url
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    } catch (localCheckError) {
+      console.error('Error checking local cache:', localCheckError);
+      // Continue with API call if local check fails
+    }
+
+    console.log('No cached data found, proceeding with SignalHire API request');
+    console.log('Using API endpoint:', SIGNALHIRE_API_URL);
+
+    try {
+      // First check available credits
+      const creditsResponse = await fetch('https://www.signalhire.com/api/v1/credits', {
+        method: 'GET',
+        headers: {
+          'apikey': SIGNALHIRE_API_KEY
+        }
+      });
+      
+      if (creditsResponse.ok) {
+        const creditsData = await creditsResponse.json();
+        console.log('Available credits:', creditsData.credits);
+        
+        if (creditsData.credits <= 0) {
+          console.error('No credits available for SignalHire API');
+          return new Response(
+            JSON.stringify({ error: 'No credits available for SignalHire API' }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        console.warn('Failed to check credits, proceeding with request anyway');
+      }
+      
+      // Format request according to SignalHire API documentation
+      const apiRequestBody = {
+        items: [url],
+        callbackUrl: CALLBACK_URL
+      };
+      
+      console.log('Making SignalHire API request with body:', JSON.stringify(apiRequestBody));
+      
+      // Set timeout and improved options for fetch
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
+      let response;
+      try {
+        response = await fetch(`${SIGNALHIRE_API_URL}/v1/candidate/search`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-KEY': SIGNALHIRE_API_KEY,
+            'apikey': SIGNALHIRE_API_KEY  // Add alternative header format for backward compatibility
+          },
+          body: JSON.stringify(apiRequestBody),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      
+      console.log('SignalHire API response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('SignalHire API error response:', errorText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: `HTTP error ${response.status}: ${errorText}` };
+        }
+        
+        console.error('SignalHire API error:', errorData);
+        
+        return new Response(
+          JSON.stringify({ 
+            error: errorData.error || `SignalHire API returned status ${response.status}` 
+          }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Process the response - should be a requestId according to documentation
+      const responseData = await response.json();
+      console.log('SignalHire API response:', responseData);
+      
+      if (responseData.requestId) {
+        console.log('Request ID received:', responseData.requestId);
+        
+        // Store the requestId in our local server
+        try {
+          const storeResponse = await fetch(`${LOCAL_SERVER_URL}/api/signalhire-request`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              requestId: responseData.requestId,
+              url: url
+            })
+          });
+          
+          if (storeResponse.ok) {
+            console.log('Request ID stored successfully');
+          } else {
+            console.error('Failed to store request ID');
+          }
+        } catch (storeError) {
+          console.error('Error storing request ID:', storeError);
+        }
+        
+        // Return a response indicating the request is in progress
+        return new Response(
+          JSON.stringify({
+            name: "Processing Request",
+            title: "Request ID: " + responseData.requestId,
+            company: "Please wait for SignalHire to process your request",
+            requestId: responseData.requestId,
+            message: "Your request is being processed by SignalHire. Check back in a few moments for results.",
+            url: url,
+            pollingUrl: `${LOCAL_SERVER_URL}/api/profile/${encodeURIComponent(url)}`
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      } else {
+        // For unexpected response format
+        return new Response(
+          JSON.stringify({ 
+            error: 'Unexpected response format from SignalHire API' 
+          }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+    } catch (fetchError: unknown) {
+      console.error('Fetch error when calling SignalHire API:', fetchError);
+      
+      const errorMessage = fetchError instanceof Error 
+        ? fetchError.message 
+        : 'Unknown connection error';
+        
+      return new Response(
+        JSON.stringify({ error: `Failed to connect to SignalHire API: ${errorMessage}` }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+  } catch (error: unknown) {
+    console.error('Error processing SignalHire request:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    return new Response(
+      JSON.stringify({ error: `Failed to process SignalHire request: ${errorMessage}` }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+};
+
+// Helper functions to extract formatted profile data
+
+function getProfileTitle(profile: any): string {
+  // First try headLine, then current position title
+  if (profile.headLine) {
+    return profile.headLine;
+  }
+  
+  if (profile.experience && profile.experience.length > 0) {
+    // Find current position (where current is true)
+    const currentPosition = profile.experience.find((exp: any) => exp.current === true);
+    if (currentPosition) {
+      return currentPosition.position || '';
+    }
+    
+    // Otherwise return the most recent position
+    return profile.experience[0].position || '';
+  }
+  
+  return '';
+}
+
+function getProfileCompany(profile: any): string {
+  if (profile.experience && profile.experience.length > 0) {
+    // Find current company (where current is true)
+    const currentPosition = profile.experience.find((exp: any) => exp.current === true);
+    if (currentPosition) {
+      return currentPosition.company || '';
+    }
+    
+    // Otherwise return the most recent company
+    return profile.experience[0].company || '';
+  }
+  
+  return '';
+}
+
+function getProfileEmail(profile: any): string {
+  if (profile.contacts && profile.contacts.length > 0) {
+    // Find first email
+    const emailContact = profile.contacts.find((contact: any) => contact.type === 'email');
+    if (emailContact) {
+      return emailContact.value || '';
+    }
+  }
+  
+  return '';
+}
+
+function getProfilePhone(profile: any): string {
+  if (profile.contacts && profile.contacts.length > 0) {
+    // Find first phone
+    const phoneContact = profile.contacts.find((contact: any) => contact.type === 'phone');
+    if (phoneContact) {
+      return phoneContact.value || '';
+    }
+  }
+  
+  return '';
+}
+
+function getProfileLocation(profile: any): string {
+  if (profile.locations && profile.locations.length > 0) {
+    return profile.locations[0].name || '';
+  }
+  
+  return '';
+}
+
+function formatExperience(experience: any[]): any[] {
+  if (!experience || !Array.isArray(experience)) {
+    return [];
+  }
+  
+  return experience.map(exp => ({
+    company: exp.company || '',
+    title: exp.position || '',
+    duration: formatDuration(exp.started, exp.ended) || ''
+  }));
+}
+
+function formatEducation(education: any[]): any[] {
+  if (!education || !Array.isArray(education)) {
+    return [];
+  }
+  
+  return education.map(edu => ({
+    school: edu.university || '',
+    degree: Array.isArray(edu.degree) ? edu.degree.join(', ') : (edu.degree || ''),
+    year: edu.endedYear ? edu.endedYear.toString() : ''
+  }));
+}
+
+function formatDuration(startDate: string, endDate: string | null): string {
+  if (!startDate) return '';
+  
+  try {
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : new Date();
+    
+    const years = end.getFullYear() - start.getFullYear();
+    const months = end.getMonth() - start.getMonth();
+    
+    let duration = '';
+    
+    if (years > 0) {
+      duration += `${years} ${years === 1 ? 'year' : 'years'}`;
+    }
+    
+    if (months > 0 || (years === 0 && months === 0)) {
+      if (duration) duration += ' ';
+      duration += `${months} ${months === 1 ? 'month' : 'months'}`;
+    }
+    
+    return duration;
+  } catch (e) {
+    return '';
+  }
+}
+
+// Add more API handlers here as needed 

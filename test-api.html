@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>API Test</title>
+  <script>
+    async function testApi() {
+      const url = document.getElementById('url').value;
+      const resultDiv = document.getElementById('result');
+      
+      resultDiv.innerHTML = 'Loading...';
+      
+      try {
+        const response = await fetch('/api/fetchProfile', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ url })
+        });
+        
+        const data = await response.json();
+        resultDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+      } catch (error) {
+        resultDiv.innerHTML = 'Error: ' + error.message;
+      }
+    }
+  </script>
+</head>
+<body>
+  <h1>Test SignalHire API</h1>
+  <div>
+    <label for="url">LinkedIn URL:</label>
+    <input type="text" id="url" value="https://www.linkedin.com/in/mockprofile-test" style="width: 300px;">
+    <button onclick="testApi()">Test API</button>
+  </div>
+  <div id="result" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc;"></div>
+</body>
+</html> 

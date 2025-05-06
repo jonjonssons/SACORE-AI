@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Enricher</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #0077B5;
+            border-bottom: 2px solid #0077B5;
+            padding-bottom: 10px;
+        }
+        .button {
+            display: inline-block;
+            background: #0077B5;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background: #f8f9fa;
+            border-left: 4px solid #0077B5;
+        }
+    </style>
+</head>
+<body>
+    <h1>LinkedIn Profile Enricher</h1>
+    
+    <p>Detta är en testversion av Profile Enricher som använder SignalHire för att berika LinkedIn-profiler.</p>
+    
+    <div class="status">
+        <h3>Server Status</h3>
+        <div id="server-status">Kontrollerar server-status...</div>
+    </div>
+    
+    <a href="/sheet-view" class="button">Gå till Sheet View</a>
+
+    <script>
+        // Kontrollera om server körs
+        fetch('/api/health')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Server error');
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('server-status').innerHTML = 
+                    `<p style="color: green;">Server körs! ✅</p>
+                     <p>Profiles: ${data.profiles || 0}</p>
+                     <p>Requests: ${data.requests || 0}</p>`;
+            })
+            .catch(error => {
+                document.getElementById('server-status').innerHTML = 
+                    `<p style="color: red;">Server svarar inte ❌</p>
+                     <p>Försäkra dig om att du har startat server.js med:</p>
+                     <pre>npm run start:server</pre>`;
+                console.error('Error:', error);
+            });
+    </script>
+</body>
+</html> 
